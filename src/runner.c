@@ -3,17 +3,16 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <stdio.h>
 
 #define FIFO_CONTROLLER "fifos/controller_fifo"
-#define FIFO_RESPONSE "fifos/response_fifo"
 
 void write_str(char *s) {
     write(1, s, strlen(s));
 }
 
 int main(int argc, char *argv[]) {
-
     if (argc < 2) {
         write_str("Usage:\n");
         write_str("./runner -e <user-id> \"<command>\"\n");
@@ -22,94 +21,109 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    pid_t mypid = getpid();
+
+    char fifo_response[100];
+    sprintf(fifo_response, "fifos/resp_%d", mypid);
+    mkfifo(fifo_response, 0666);
+
     if (strcmp(argv[1], "-e") == 0) {
+        if (argc < 4) {
+            write_str("Usage: ./runner -e <user-id> \"<command>\"\n");
+            unlink(fifo_response);
+            return 1;
+        }
 
-    if (argc < 4) {
-        write_str("Usage: ./runner -e <user-id> \"<command>\"\n");
-        return 1;
+        int fd = open(FIFO_CONTROLLER, O_WRONLY);
+        if (fd < 0) {
+            write_str("[runner] controller not running\n");
+            unlink(fifo_response);
+            return 1;
+        }
+
+        char msg[512];
+        sprintf(msg, "EXEC|%s|%d|%s|%s\n", argv[2], mypid, fifo_response, argv[3]);
+
+        write(fd, msg, strlen(msg));
+        close(fd);
+
+        write_str("[runner] command ");
+        char idbuf[32];
+        sprintf(idbuf, "%d", mypid);
+        write_str(idbuf);
+        write_str(" submitted\n");
+
+        int res = open(fifo_response, O_RDONLY);
+        char buffer[32];
+        read(res, buffer, sizeof(buffer));
+        close(res);
+
+        write_str("[runner] executing command ");
+        write_str(idbuf);
+        write_str("...\n");
+
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            execlp("sh", "sh", "-c", argv[3], NULL);
+            _exit(1);
+        } else {
+            wait(NULL);
+        }
+
+        write_str("[runner] command ");
+        write_str(idbuf);
+        write_str(" finished\n");
+
+        fd = open(FIFO_CONTROLLER, O_WRONLY);
+        sprintf(msg, "DONE|%s|%d|%s\n", argv[2], mypid, argv[3]);
+        write(fd, msg, strlen(msg));
+        close(fd);
     }
 
-    int user_id = atoi(argv[2]);
-    int command_id = getpid();
+    else if (strcmp(argv[1], "-c") == 0) {
+        int fd = open(FIFO_CONTROLLER, O_WRONLY);
+        if (fd < 0) {
+            write_str("[runner] controller not running\n");
+            unlink(fifo_response);
+            return 1;
+        }
 
-    int fd = open(FIFO_CONTROLLER, O_WRONLY);
+        char msg[256];
+        sprintf(msg, "STATUS|%s\n", fifo_response);
 
-    if (fd < 0) {
-        write_str("[runner] controller not running\n");
-        return 1;
+        write(fd, msg, strlen(msg));
+        close(fd);
+
+        int res = open(fifo_response, O_RDONLY);
+        char buffer[2048];
+        int n = read(res, buffer, sizeof(buffer) - 1);
+
+        if (n > 0) {
+            buffer[n] = '\0';
+            write(1, buffer, n);
+        }
+
+        close(res);
     }
 
-    char exec_msg[512];
-    sprintf(exec_msg, "EXEC|%s|%s\n", argv[2], argv[3]);
-    write(fd, exec_msg, strlen(exec_msg));
-
-    write_str("[runner] command submitted\n");
-
-    int res = open(FIFO_RESPONSE, O_RDONLY);
-
-    char reply[10];
-    read(res, reply, sizeof(reply));
-    close(res);
-
-    write_str("[runner] executing...\n");
-
-    pid_t pid = fork();
-
-    if (pid == 0) {
-        execlp("sh", "sh", "-c", argv[3], NULL);
-        _exit(1);
-    } else {
-        wait(NULL);
-        write_str("[runner] command finished\n");
-    }
-    
-    int fd_done = open(FIFO_CONTROLLER, O_WRONLY);
-
-    char done_msg[512];
-    sprintf(done_msg, "DONE|%s|%s\n", argv[2], argv[3]);
-    write(fd_done, done_msg, strlen(done_msg));
-
-    close(fd_done);
-
-}
-
-else if (strcmp(argv[1], "-c") == 0) {
-    int fd = open(FIFO_CONTROLLER, O_WRONLY);
-
-    write(fd, "STATUS\n", 7);
-    close(fd);
-
-    int res = open(FIFO_RESPONSE, O_RDONLY);
-
-    char buffer[512];
-    int n = read(res, buffer, sizeof(buffer) - 1);
-
-    if (n > 0) {
-        buffer[n] = '\0';
-        write(1, buffer, n);
-    }   
-
-    close(res);
-}
     else if (strcmp(argv[1], "-s") == 0) {
+        int fd = open(FIFO_CONTROLLER, O_WRONLY);
+        if (fd < 0) {
+            write_str("[runner] controller not running\n");
+            unlink(fifo_response);
+            return 1;
+        }
 
-    int fd = open(FIFO_CONTROLLER, O_WRONLY);
+        char msg[256];
+        sprintf(msg, "STOP|%s\n", fifo_response);
 
-    if (fd < 0) {
-        write_str("[runner] controller not running\n");
-        return 1;
+        write(fd, msg, strlen(msg));
+        close(fd);
+
+        write_str("[runner] sent shutdown notification\n");
     }
 
-    write(fd, "STOP\n", 5);
-    close(fd);
-
-    write_str("[runner] stop request\n");
-}
-    
-    else {
-        write_str("Invalid option\n");
-        return 1;
-    }
-
+    unlink(fifo_response);
     return 0;
 }
