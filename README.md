@@ -7,6 +7,6 @@ Licenciatura em Ciências da Computação
 Ano letivo 2025/2026
 
 ## Autores:
-Victor Alexandre Praça Maciel
+Victor Praça 
 Lúcia Zhou
-Diana Rafaela Gonçalves Cordeiro
+Diana Cordeiro
