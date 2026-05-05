@@ -5,11 +5,36 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <stdio.h>
+#include <assert.h>
 
 #define FIFO_CONTROLLER "fifos/controller_fifo"
 
 void write_str(char *s) {
     write(1, s, strlen(s));
+}
+
+int exec_command(char *arg){
+    char *exec_args[20];
+    int args_count = 0;
+    char *token, *string, *tofree;
+
+    tofree = string = strdup(arg);
+    assert(string != NULL);
+
+    while ((token = strsep(&string, " ")) != NULL){
+        if(strlen(token) > 0){
+            exec_args[args_count++] = token;
+        }
+    }
+
+    exec_args[args_count] = NULL;
+
+    execvp(exec_args[0], exec_args);
+    perror("Exec error");
+    free(tofree);
+    return -1;
+    
+
 }
 
 int main(int argc, char *argv[]) {
@@ -61,16 +86,65 @@ int main(int argc, char *argv[]) {
         write_str("[runner] executing command ");
         write_str(idbuf);
         write_str("...\n");
+////////////////////////////////////////////////////////////
+        char *commands[20];
+        int number_of_commands = 0;
+        char *full_cmd = strdup(argv[3]);
+        char *token = strsep(&full_cmd, "|");
+        int fildes[20][2];
 
-        pid_t pid = fork();
-
-        if (pid == 0) {
-            execlp("sh", "sh", "-c", argv[3], NULL);
-            _exit(1);
-        } else {
+        while (token != NULL){
+            commands[number_of_commands++] = token;
+            token = strsep(&full_cmd, "|");
+        }
+        
+        if(number_of_commands == 1){
+            if(fork() == 0){
+                exec_command(commands[0]);
+            }       
+        } else{
+            for(int i = 0; i < number_of_commands; i++){
+                if(i == 0) {
+                    pipe(fildes[0]);
+                    if(fork() == 0){
+                        close(fildes[0][0]);
+                        dup2(fildes[0][1], 1);
+                        close(fildes[0][1]);
+                        exec_command(commands[0]);
+                        _exit(1);
+                    }
+                    close(fildes[0][1]);
+                }
+                else if(i == number_of_commands - 1) {
+                    if (fork() == 0){
+                            dup2(fildes[i - 1][0], 0);
+                            close(fildes[i - 1][0]);
+                            exec_command(commands[i]);
+                            _exit(1);
+                    }
+                    close(fildes[i - 1][0]);
+                }
+                else{
+                    pipe(fildes[i]);
+                    if(fork() == 0){
+                        close(fildes[i][0]);
+                        dup2(fildes[i - 1][0], 0);
+                        close(fildes[i - 1][0]);
+                        dup2(fildes[i][1], 1);
+                        close(fildes[i][1]);
+                        exec_command(commands[i]);
+                        _exit(1);
+                    }
+                    close(fildes[i][1]);
+                    close(fildes[i - 1][0]);
+                }
+            }
+        }
+    
+        for (int i = 0; i < number_of_commands; i++){
             wait(NULL);
         }
-
+////////////////////////////////////////////////////////////
         write_str("[runner] command ");
         write_str(idbuf);
         write_str(" finished\n");
