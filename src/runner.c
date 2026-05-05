@@ -29,7 +29,38 @@ int exec_command(char *arg){
 
     exec_args[args_count] = NULL;
 
-    execvp(exec_args[0], exec_args);
+    char *clean_args[20];
+    int clean_count = 0;
+
+    for(int i = 0; i < args_count; i++){
+        if(strcmp(exec_args[i], "<") == 0){
+            int fd = open(exec_args[i + 1], O_RDONLY);
+            if(fd < 0) {
+                perror("Erro ao abrir ficheiro de entrada");
+                _exit(1);
+            }
+            dup2(fd,0);
+            close(fd);
+            i++;
+        }
+        else if (strcmp(exec_args[i], ">") == 0){
+            int fd = open(exec_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd < 0) {
+                perror("Erro ao criar ficheiro de erros");
+                _exit(1);
+            }
+            dup2(fd, 2);
+            close(fd);
+            i++;
+        }
+        else { 
+            clean_args[clean_count++] = exec_args[i];
+        }
+    }
+
+    clean_args[clean_count] = NULL;
+
+    execvp(clean_args[0], clean_args);
     perror("Exec error");
     free(tofree);
     return -1;
