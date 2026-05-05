@@ -39,11 +39,21 @@ int exec_command(char *arg){
                 perror("Erro ao abrir ficheiro de entrada");
                 _exit(1);
             }
-            dup2(fd,0);
+            dup2(fd, 0);
             close(fd);
             i++;
         }
         else if (strcmp(exec_args[i], ">") == 0){
+            int fd = open(exec_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd < 0) {
+                perror("Erro ao criar ficheiro de erros");
+                _exit(1);
+            }
+            dup2(fd, 1);
+            close(fd);
+            i++;
+        }
+        else if (strcmp(exec_args[i], "2>") == 0){
             int fd = open(exec_args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
             if (fd < 0) {
                 perror("Erro ao criar ficheiro de erros");

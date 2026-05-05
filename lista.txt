@@ -1,0 +1,8 @@
+total 20
+-rw-r--r-- 1 victorpraca victorpraca  201 May  4 13:42 README.md
+drwxr-xr-x 2 victorpraca victorpraca 4096 May  5 15:22 bin
+drwxr-xr-x 2 victorpraca victorpraca 4096 May  5 15:22 fifos
+-rw-r--r-- 1 victorpraca victorpraca    0 May  5 15:22 lista.txt
+-rw-r--r-- 1 victorpraca victorpraca    0 May  5 15:04 out.txt
+drwxr-xr-x 2 victorpraca victorpraca 4096 May  4 13:42 src
+-rw-r--r-- 1 victorpraca victorpraca  785 May  4 13:42 test.c
